@@ -1,0 +1,314 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+If you opened this rmd directly, the file paths will not work, be sure
+you opened the .rproj file and then opened the this rmd within rstudio
+
+Leave coverages in current folders or code won't work!
+
+```{r echo = FALSE}
+library(tidyverse)
+library(tmap)
+library(terra) #the raster package is going away, switching to terra
+library(raster)
+library(whitebox)
+library(RSAGA)
+library(sf)
+library(qgisprocess)
+library(caret)
+
+algos <- qgis_algorithms()
+#install_whitebox()
+wbt_init()
+```
+
+Whitebox tools manual:
+<https://www.whiteboxgeo.com/manual/wbt_book/intro.html> RSAGA:
+<https://cran.r-project.org/web/packages/RSAGA/RSAGA.pdf>
+
+Prep DEM for hydro related metrics and make 5m regular dem
+
+Feature preserving smooth Fill single cell pits Breach larger
+depressions
+
+```{r}
+#originaldem <- "knb-lter-hbr.211.2/dem1m.tif"
+#hydro_prepped_orig_dem <- "knb-lter-hbr.211.2/hydem1mlpns.tif"
+
+#data_dir <- "ConePond/"
+#originaldem <- "cnp1mdem.tif"
+#hydro_prepped_orig_dem <- "cnp1mdem.tif"
+
+#data_dir <- "BlackPond/" #with a / after ie. directory/
+#originaldem <- "bk1mdem.tif"
+#hydro_prepped_orig_dem <- "bk1mdem.tif"
+#epsg_orig <- "epsg:26919"
+#
+#data_dir <- "HBValley/" #with a / after ie. directory/
+#originaldem <- "knb-lter-hbr.211.2/dem1m.tif"
+#hydro_prepped_orig_dem <- "knb-lter-hbr.211.2/hydem1mlpns.tif"
+epsg_orig <- "epsg:26919"
+
+data_dir <- "Data/"
+out_dir <- "Output/"
+originaldem <- "hydem1mlpns.tif"
+hydro_prepped_orig_dem <- "hydem1mlpns.tif"
+
+
+#Aggregate 1 m DEM to 5 m
+wbt_aggregate_raster(
+  input = paste0(data_dir, originaldem),
+  output = paste0(out_dir, "dem5m_noproj.tif"),
+  agg_factor = 5
+  )
+
+#aggregate strips the projection, this adds it back in
+temp <- rast(paste0(out_dir, "dem5m_noproj.tif"))
+crs(temp) <- epsg_orig
+writeRaster(temp, 
+           paste0(out_dir, "dem5m.tif"),
+           overwrite = TRUE)
+
+#this strips the projection
+#must add the projection back after
+#calculating downslope index
+#downslope index tool does not like 
+#rasters output by terra functions
+wbt_aggregate_raster(
+  input = paste0(data_dir, hydro_prepped_orig_dem),
+  output = paste0(out_dir, "hydem5m.tif"),
+  agg_factor = 5
+  )
+
+#smooth 5m DEM
+wbt_feature_preserving_smoothing(
+  dem = paste0(out_dir, "hydem5m.tif"),
+  output = paste0(out_dir, "hydem5m_smooth.tif"),
+  filter = 11,
+  norm_diff = 15,
+  num_iter = 3,
+  max_diff = 0.5)
+
+#breach depressions
+wbt_breach_depressions_least_cost(
+  dem = paste0(out_dir, "hydem5m_smooth.tif"),
+  output = paste0(out_dir, "hydem5m_smooth_breached.tif"),
+  dist = 100,
+  flat_increment = 0.01)
+
+#fill remaining depressions there is 
+#a bug in the breach depressions least cost
+#function that leaves some depressions, 
+#this fixes that
+wbt_fill_depressions_wang_and_liu(
+  dem = paste0(out_dir, "hydem5m_smooth_breached.tif"),
+  output = paste0(out_dir, "hydem5m_smooth_breached_filled.tif")
+)
+
+```
+
+Code used to check on DEMs generated above
+```{r}
+wbt_hillshade(
+  dem = paste0(out_dir, "hydem5m_smooth_breached_filled.tif"),
+  output = paste0(out_dir, "hydem5m_prepped_hillshade.tif"))
+
+```
+
+Original topo metrics (Gillin et al 2015) TPI 100 TWId EDb Uaab 
+
+New metrics moving forward in Whitebox or RSAGA Max slope (1m) (use 1m DEM)
+
+TPI 20, 100, 500 (SAGA, DevFromMeanElev in WBT?) (5m but not smoothed)
+Multi-resolution valley bottom (MRVB; SAGA; 5m not smoothed) TWId
+(GRASS, raster calculator; 5m, hydro prepped) Feature preserving filter
+
+DEM (GRASS) Ln(UAA/tan(downslope index 5m distance))? SAGA \#downslope
+unsaturated flowpath with WBT free trial (1m, 5m, smooth/not)
+
+TPI
+<https://www.whiteboxgeo.com/manual/wbt_book/available_tools/geomorphometric_analysis.html?highlight=topographic%20position#relativetopographicposition>
+
+```{r}
+
+#qgis_show_help("saga:slopeaspectcurvature")
+dem <- rast(paste0(out_dir, "hydem5m.tif"))
+
+#slope in radians
+qgis_run_algorithm(algorithm = "sagang:slopeaspectcurvature",
+                  ELEVATION = dem,
+                  METHOD = 0,
+                  UNIT_SLOPE = 2,
+                  SLOPE = paste0(out_dir, "slope_per_qgis_5m")
+                   )
+
+qgis_slope <- rast(paste0(out_dir, "slope_per_qgis_5m.sdat"))
+crs(qgis_slope) <- "epsg:26919"
+writeRaster(qgis_slope, paste0(data_dir, "slope_per_qgis.tif"), overwrite = TRUE)
+
+#slope in percent
+qgis_run_algorithm(algorithm = "sagang:slopeaspectcurvature",
+                  ELEVATION = dem,
+                  METHOD = 0,
+                  UNIT_SLOPE = 0,
+                  SLOPE = paste0(data_dir, "slope_rad_qgis_5m")
+                   )
+
+qgis_slope <- rast(paste0(data_dir, "slope_rad_qgis_5m.sdat"))
+crs(qgis_slope) <- epsg_orig
+writeRaster(qgis_slope, paste0(out_dir, "slope_rad_qgis.tif"), overwrite = TRUE)
+
+#log md inf (Seibert & McGlynn 07) flow accumulation
+#1.65 seconds
+wbt_md_inf_flow_accumulation(
+  dem = paste0(out_dir, "hydem5m_smooth_breached_filled.tif"),
+  output = paste0(out_dir, "hydem5m_mdinf_fa.tif"),
+  out_type = "specific contributing area"
+)
+
+#tangent downslope index
+wbt_downslope_index(
+  dem = paste0(out_dir, "hydem5m_smooth_breached_filled.tif"),
+  output= paste0(out_dir, "hydem5m_downslope_index.tif"),
+  drop = 5,
+  out_type = "tangent"
+)
+
+#read flow accumulation and downslope index for raster calc operation
+mdinf <- rast(paste0(out_dir, "hydem5m_mdinf_fa.tif"))
+tan_ds_index <- rast(paste0(out_dir, "hydem5m_downslope_index.tif"))
+
+#divide natural log flow accumulation by tangent of downslope index
+# + 0.00001 to eliminate inf values bc of division by zero
+TWId <- base::log(mdinf / (tan_ds_index + 0.000001)) #log10?
+
+crs(TWId) <- epsg_orig
+
+#output TWId to file
+writeRaster(TWId, paste0(out_dir, "hydem5m_TWId.tif"), overwrite = TRUE)
+```
+
+
+```{r}
+#qgis_show_help("saga:topographicpositionindextpi")
+dem <- rast(paste0(out_dir, "hydem5m.tif"))
+
+sagatpi <- function(dem, data_dir, radius){
+  qgis_run_algorithm(algorithm = "sagang:topographicpositionindextpi",
+                  STANDARD = 0,
+                  DEM = dem,
+                  RADIUS_MIN = radius,
+                  RADIUS_MAX = radius,
+                  TPI = paste0(out_dir, "tpi", radius, "saga")
+                   )
+  
+  tpisaga <- rast(paste0(out_dir, "tpi", radius, "saga.sdat"))
+  
+  crs(tpisaga) <- "epsg:26919"
+  
+  writeRaster(tpisaga, 
+              paste0(out_dir, "tpi", radius, "saga.tif"), 
+              overwrite = TRUE)
+}
+
+sagatpi(dem, out_dir, radius = 15)
+sagatpi(dem, out_dir, radius = 20)
+sagatpi(dem, out_dir, radius = 100)
+sagatpi(dem, out_dir, radius = 200)
+sagatpi(dem, out_dir, radius = 250)
+sagatpi(dem, out_dir, radius = 500)
+sagatpi(dem, out_dir, radius = 1000)
+sagatpi(dem, out_dir, radius = 1500)
+sagatpi(dem, out_dir, radius = 2000)
+sagatpi(dem, out_dir, radius = 2500)
+
+
+```
+
+Euclidean distance from bedrock
+```{r}
+#euclidian distance from bedrock
+boss01 <- raster(paste0(data_dir,"HBbossBRprediction.tif"))
+
+#check to be sure br = 1 and no br = 0, if not use code below
+#boss01[boss01 == 1] <- 0
+#boss01[boss01 == 2] <- 1 
+
+writeRaster(boss01, paste0(out_dir, "bossBRprediction.tif"), overwrite = TRUE)
+
+wbt_euclidean_distance(
+      input = paste0(out_dir,"bossBRprediction.tif"),
+      output = paste0(out_dir, "EDb.tif"))
+
+```
+
+Make UAAb bedrock weighted UAA using QGIS
+```{r}
+#prep BR weight grid by making BR values 10000
+BR <- raster(paste0(out_dir,"bossBRprediction.tif"))
+BR[BR == 1] <- 100000 #BR == 2 means bedrock in current prediction model
+BR[BR == 0] <- 0
+writeRaster(BR, paste0(out_dir, "BRweights.tif"), overwrite = TRUE)
+
+#use QGIS to make UAAb
+weights <- raster(paste0(out_dir,"BRweights.tif"))
+
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                  FLOW_UNIT = 0,
+                  ELEVATION = dem,
+                  METHOD = 3,
+                  NO_NEGATIVES = 1,
+                  ACCU_TARGET = dem,
+                  FLOW = paste0(out_dir, "catcharea")
+                   )
+
+catcharea <- rast(paste0(out_dir, "catcharea.sdat"))
+crs(catcharea) <- epsg_orig
+writeRaster(catcharea, paste0(out_dir, "catcharea.tif"), overwrite = TRUE)
+
+#weighted
+#qgis_show_help("saga:catchmentarearecursive")
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                  ELEVATION = dem,
+                  FLOW_UNIT = 0,
+                  METHOD = 3,
+                  WEIGHTS = weights,
+                  NO_NEGATIVES = 1,
+                  ACCU_TARGET = dem,
+                  FLOW = paste0(out_dir, "catcharea_br")
+                   )
+
+catcharea_br <- rast(paste0(out_dir, "catcharea_br.sdat"))
+crs(catcharea_br) <- epsg_orig
+writeRaster(catcharea_br, paste0(out_dir, "catcharea_br.tif"), overwrite = TRUE)
+
+diff <- catcharea_br/catcharea
+normdiff <- (diff - minmax(diff)[1]) / (minmax(diff)[2] - minmax(diff)[1])
+writeRaster(normdiff, paste0(out_dir, "uaab_norm2.tif"), overwrite = TRUE)
+
+```
+
+MRVBF
+```{r}
+###MRVBF in QGIS package
+dem <- raster(paste0(out_dir, "hydem5m.tif"))
+
+#qgis_show_help("saga:multiresolutionindexofvalleybottomflatnessmrvbf")
+qgis_run_algorithm(algorithm = "sagang:multiresolutionindexofvalleybottomflatnessmrvbf",
+                  DEM = dem,
+                  MRVBF = paste0(out_dir, "mrvbf_qgis")
+                   )
+
+mrvbf <- rast(paste0(out_dir, "mrvbf_qgis.sdat"))
+crs(mrvbf) <- epsg_orig
+writeRaster(mrvbf, paste0(out_dir, "mrvbf.tif"), overwrite = TRUE)
+```
+
+
+
+

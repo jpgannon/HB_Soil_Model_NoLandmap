@@ -44,21 +44,29 @@ depressions
 #originaldem <- "cnp1mdem.tif"
 #hydro_prepped_orig_dem <- "cnp1mdem.tif"
 
-#data_dir <- "BlackPond/" #with a / after ie. directory/
-#originaldem <- "bk1mdem.tif"
-#hydro_prepped_orig_dem <- "bk1mdem.tif"
-#epsg_orig <- "epsg:26919"
-#
-#data_dir <- "HBValley/" #with a / after ie. directory/
-#originaldem <- "knb-lter-hbr.211.2/dem1m.tif"
-#hydro_prepped_orig_dem <- "knb-lter-hbr.211.2/hydem1mlpns.tif"
+#BLACK PONT
+originaldem <- "bk1mdem.tif"
+hydro_prepped_orig_dem <- "bk1mdem.tif"
 epsg_orig <- "epsg:26919"
+data_dir <- "BlackPond/Data/"
+out_dir <- "BlackPond/Output/"
+boss01 <- raster(paste0(data_dir,"BLACKbossBRprediction.tif"))
+#check to be sure br = 1 and no br = 0, if not use code below
+boss01[boss01 == 1] <- 0
+boss01[boss01 == 2] <- 1 
 
-data_dir <- "Data/"
-out_dir <- "Output/"
-originaldem <- "hydem1mlpns.tif"
-hydro_prepped_orig_dem <- "hydem1mlpns.tif"
+#HUBBARD BROOK
+#data_dir <- "Data/"
+#out_dir <- "Output/"
+#originaldem <- "hydem1mlpns.tif"
+#hydro_prepped_orig_dem <- "hydem1mlpns.tif"
+#boss01 <- raster(paste0(data_dir,"HBbossBRprediction.tif"))
 
+#check to be sure br = 1 and no br = 0, if not use code below
+#boss01[boss01 == 1] <- 0
+#boss01[boss01 == 2] <- 1 
+
+epsg_orig <- "epsg:26919"
 
 #Aggregate 1 m DEM to 5 m
 wbt_aggregate_raster(
@@ -233,11 +241,6 @@ sagatpi(dem, out_dir, radius = 2500)
 Euclidean distance from bedrock
 ```{r}
 #euclidian distance from bedrock
-boss01 <- raster(paste0(data_dir,"HBbossBRprediction.tif"))
-
-#check to be sure br = 1 and no br = 0, if not use code below
-#boss01[boss01 == 1] <- 0
-#boss01[boss01 == 2] <- 1 
 
 writeRaster(boss01, paste0(out_dir, "bossBRprediction.tif"), overwrite = TRUE)
 

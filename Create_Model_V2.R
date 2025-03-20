@@ -68,7 +68,11 @@ ensemble <- makeStackedLearner(base.learners = base_learners,
 # Train the ensemble model on the training task
 ensemble_model <- train(ensemble, task)
 
+saveRDS(ensemble_model, paste0("soilmodel-", date(),".rds"))
+
+####
 # Predict ensemble model across entire raster space (cov_stack)
+####
 
 # Generate coordinates raster matching cov_stack
 coords_rast <- as.data.frame(terra::xyFromCell(cov_stack, 1:ncell(cov_stack)))
@@ -96,8 +100,6 @@ ensemble_pred <- predict(ensemble_model, newdata = valid_data)
 probabilities <- ensemble_pred$data[, -1]  # probabilities for each class
 predicted_class <- ensemble_pred$data$response
 
-######
-#####
 # Explicitly define the raster stack as numeric (float)
 prob_rasters <- rast(nrows = nrow(cov_stack), 
                      ncols = ncol(cov_stack), 

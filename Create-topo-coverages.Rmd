@@ -44,7 +44,7 @@ depressions
 #originaldem <- "cnp1mdem.tif"
 #hydro_prepped_orig_dem <- "cnp1mdem.tif"
 
-#BLACK PONT
+#BLACK POND
 originaldem <- "bk1mdem.tif"
 hydro_prepped_orig_dem <- "bk1mdem.tif"
 epsg_orig <- "epsg:26919"
@@ -60,6 +60,8 @@ boss01[boss01 == 2] <- 1
 #out_dir <- "Output/"
 #originaldem <- "hydem1mlpns.tif"
 #hydro_prepped_orig_dem <- "hydem1mlpns.tif"
+#this version of BR is from Olivia's original Bedrock model run
+#in folder bedrock/ in original metrics/ on google drive
 #boss01 <- raster(paste0(data_dir,"HBbossBRprediction.tif"))
 
 #check to be sure br = 1 and no br = 0, if not use code below

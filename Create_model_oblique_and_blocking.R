@@ -61,14 +61,6 @@ effective_range <- vgm_model$range[2]
 # Convert training data to sf spatial object for blockCV
 training_sf <- st_as_sf(training_data, coords = c("rX_0", "rY_0"), crs = crs(cov_stack))
 
-# Use cv_spatial for spatial cross-validation blocking
-# Convert training data to sf spatial object for blockCV
-training_sf <- st_as_sf(training_data, coords = c("rX_0", "rY_0"), crs = crs(cov_stack))
-
-# Spatial blocking with cv_spatial using effective range
-# Convert to sf object explicitly using original coordinates
-training_sf <- st_as_sf(training_data, coords = c("rX_0", "rY_0"), crs = crs(cov_stack))
-
 # Calculate empirical variogram to determine spatial blocking range
 vgm_empirical <- variogram(as.numeric(class) ~ 1, data = training_sf)
 vgm_model <- fit.variogram(vgm_empirical, model = vgm("Exp"))
@@ -89,7 +81,7 @@ set.seed(123)
 block <- cv_spatial(
   x = training_sf,
   column = "class",
-  size = effective_range,
+  size = effective_range, #180.8048
   k = 5,
   selection = "random"
 )
